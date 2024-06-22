@@ -184,11 +184,39 @@ const pushToGitHub = async (button) => {
 // UTILS
 // input utils
 const remember = ((inputsToRemember) => {
+    const baseKey = 'your-base-key';
+
+    // Securely encrypted with unique random keys and rotated every minute per browser
+    const generateRandomString = (length) => {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    };
+
+    const updateKey = (identifier) => {
+        const newRandomKey = generateRandomString(16);
+        localStorage.setItem(`${identifier}_key`, newRandomKey);
+        return baseKey + newRandomKey;
+    };
+
+    const getCurrentKey = (identifier) => {
+        let randomKey = localStorage.getItem(`${identifier}_key`);
+        if (!randomKey) {
+            randomKey = generateRandomString(16);
+            localStorage.setItem(`${identifier}_key`, randomKey);
+        }
+        return baseKey + randomKey;
+    };
+
     const rememberInput = ({ input, identifier, defaultValue = null }) => {
-        const key = 'your-key-is-here';
         const storedValue = localStorage.getItem(identifier);
 
         if (storedValue) {
+            const key = getCurrentKey(identifier);
             const bytes = CryptoJS.AES.decrypt(storedValue, key);
             input.value = bytes.toString(CryptoJS.enc.Utf8);
         } else if (defaultValue !== null) {
@@ -196,12 +224,26 @@ const remember = ((inputsToRemember) => {
         }
 
         input.addEventListener("input", e => {
+            const key = getCurrentKey(identifier);
             const encryptedValue = CryptoJS.AES.encrypt(e.target.value, key).toString();
             localStorage.setItem(identifier, encryptedValue);
         });
     };
 
-    inputsToRemember.forEach(config => rememberInput(config));
+    const setupKeyRotation = (identifier, input) => {
+        const rotateKey = () => {
+            const key = updateKey(identifier);
+            const encryptedValue = CryptoJS.AES.encrypt(input.value, key).toString();
+            localStorage.setItem(identifier, encryptedValue);
+            setTimeout(rotateKey, 1 * 60 * 1000); //loop
+        };
+        setTimeout(rotateKey, 1 * 60 * 1000); //init
+    };
+
+    inputsToRemember.forEach(config => {
+        rememberInput(config);
+        setupKeyRotation(config.identifier, config.input);
+    });
 })(inputsToRemember);
 
 // api utils
